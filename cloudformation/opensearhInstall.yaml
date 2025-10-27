@@ -1,0 +1,292 @@
+Parameters:
+  DomainName:
+    Type: String
+    Description: "Name of the OpenSearch domain"
+    Default: "bank-opensearch-domain"
+
+  BANKuser:
+    Type: String
+    Description: "Master username for OpenSearch domain"
+    MinLength: 1
+    Default: "Bankadmin"
+    
+  BANKpassword:
+    Type: String
+    Description: "Master password for OpenSearch domain"
+    MinLength: 8
+    NoEcho: true
+    ConstraintDescription: "Password must be at least 8 characters long"
+    Default: "Bankadmin123!"
+
+Resources:
+  WorkshopParticipantPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: WorkshopFullAccessPolicyOpensearch
+      Roles: 
+        - "WSParticipantRole"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "es:*"
+              - "aoss:*"
+              - "opensearch:*"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "sagemaker:*"
+              - "sagemaker-runtime:*"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:PutObject"
+              - "s3:DeleteObject"
+              - "s3:ListBucket"
+              - "s3:GetBucketLocation"
+              - "s3:ListAllMyBuckets"
+            Resource:
+              - "arn:aws:s3:::*"
+              - "arn:aws:s3:::*/*"
+          - Effect: Allow
+            Action:
+              - "bedrock:*"
+            Resource: "*"
+          - Sid: "BedrockAgentCoreFullAccess"
+            Effect: Allow
+            Action:
+              - "bedrock-agentcore:*"
+            Resource: "arn:aws:bedrock-agentcore:*:*:*"
+          - Sid: "IAMListAccess"
+            Effect: Allow
+            Action:
+              - "iam:GetRole"
+              - "iam:GetRolePolicy"
+              - "iam:ListAttachedRolePolicies"
+              - "iam:ListRolePolicies"
+              - "iam:ListRoles"
+            Resource: "arn:aws:iam::*:role/*"
+          - Sid: "BedrockAgentCorePassRoleAccess"
+            Effect: Allow
+            Action: "iam:PassRole"
+            Resource: "arn:aws:iam::*:role/*BedrockAgentCore*"
+            Condition:
+              StringEquals:
+                "iam:PassedToService": "bedrock-agentcore.amazonaws.com"
+          - Sid: "SecretsManagerAccess"
+            Effect: Allow
+            Action:
+              - "secretsmanager:CreateSecret"
+              - "secretsmanager:PutSecretValue"
+              - "secretsmanager:GetSecretValue"
+              - "secretsmanager:DeleteSecret"
+            Resource: "arn:aws:secretsmanager:*:*:secret:bedrock-agentcore*"
+          - Sid: "BedrockAgentCoreKMSReadAccess"
+            Effect: Allow
+            Action:
+              - "kms:ListKeys"
+              - "kms:DescribeKey"
+            Resource:
+              - "arn:aws:kms:*:*:key/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceAccount": "${aws:PrincipalAccount}"
+          - Sid: "BedrockAgentCoreKMSAccess"
+            Effect: Allow
+            Action:
+              - "kms:Decrypt"
+              - "kms:GenerateDataKey"
+            Resource:
+              - "arn:aws:kms:*:*:key/*"
+            Condition:
+              StringEquals:
+                "aws:ResourceAccount": "${aws:PrincipalAccount}"
+              ForAnyValue:StringEquals:
+                "aws:CalledVia":
+                  - "bedrock-agentcore.amazonaws.com"
+          - Sid: "BedrockAgentCoreS3Access"
+            Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource:
+              - "arn:aws:s3:::bedrock-agentcore-gateway-*"
+            Condition:
+              StringEquals:
+                "aws:CalledViaLast": "bedrock-agentcore.amazonaws.com"
+                "s3:ResourceAccount": "${aws:PrincipalAccount}"
+          - Sid: "BedrockAgentCoreGatewayLambdaAccess"
+            Effect: Allow
+            Action:
+              - "lambda:ListFunctions"
+            Resource:
+              - "arn:aws:lambda:*:*:*"
+          - Sid: "LoggingAccess"
+            Effect: Allow
+            Action:
+              - "logs:Get*"
+              - "logs:List*"
+              - "logs:StartQuery"
+              - "logs:StopQuery"
+              - "logs:Describe*"
+              - "logs:TestMetricFilter"
+              - "logs:FilterLogEvents"
+            Resource:
+              - "arn:aws:logs:*:*:log-group:/aws/bedrock-agentcore/*"
+              - "arn:aws:logs:*:*:log-group:/aws/application-signals/data:*"
+              - "arn:aws:logs:*:*:log-group:aws/spans:*"
+          - Sid: "ObservabilityReadOnlyPermissions"
+            Effect: Allow
+            Action:
+              - "application-autoscaling:DescribeScalingPolicies"
+              - "application-signals:BatchGet*"
+              - "application-signals:Get*"
+              - "application-signals:List*"
+              - "autoscaling:Describe*"
+              - "cloudwatch:BatchGet*"
+              - "cloudwatch:Describe*"
+              - "cloudwatch:GenerateQuery"
+              - "cloudwatch:Get*"
+              - "cloudwatch:List*"
+              - "oam:ListSinks"
+              - "rum:BatchGet*"
+              - "rum:Get*"
+              - "rum:List*"
+              - "synthetics:Describe*"
+              - "synthetics:Get*"
+              - "synthetics:List*"
+              - "xray:BatchGet*"
+              - "xray:Get*"
+              - "xray:List*"
+              - "xray:StartTraceRetrieval"
+              - "xray:CancelTraceRetrieval"
+              - "logs:DescribeLogGroups"
+              - "logs:StartLiveTail"
+              - "logs:StopLiveTail"
+            Resource: "*"
+          - Sid: "TransactionSearchXRayPermissions"
+            Effect: Allow
+            Action:
+              - "xray:GetTraceSegmentDestination"
+              - "xray:UpdateTraceSegmentDestination"
+              - "xray:GetIndexingRules"
+              - "xray:UpdateIndexingRule"
+            Resource: "*"
+          - Sid: "TransactionSearchLogGroupPermissions"
+            Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutRetentionPolicy"
+            Resource:
+              - "arn:aws:logs:*:*:log-group:/aws/application-signals/data:*"
+              - "arn:aws:logs:*:*:log-group:aws/spans:*"
+          - Sid: "TransactionSearchLogsPermissions"
+            Effect: Allow
+            Action:
+              - "logs:DescribeResourcePolicies"
+            Resource:
+              - "*"
+            Condition:
+              StringEquals:
+                "aws:ResourceAccount": "${aws:PrincipalAccount}"
+          - Sid: "TransactionSearchApplicationSignalsPermissions"
+            Effect: Allow
+            Action:
+              - "application-signals:StartDiscovery"
+            Resource: "*"
+          - Sid: "CloudWatchApplicationSignalsCreateServiceLinkedRolePermissions"
+            Effect: Allow
+            Action: "iam:CreateServiceLinkedRole"
+            Resource: "arn:aws:iam::*:role/aws-service-role/application-signals.cloudwatch.amazonaws.com/AWSServiceRoleForCloudWatchApplicationSignals"
+            Condition:
+              StringLike:
+                "iam:AWSServiceName": "application-signals.cloudwatch.amazonaws.com"
+          - Sid: "CloudWatchApplicationSignalsGetRolePermissions"
+            Effect: Allow
+            Action: "iam:GetRole"
+            Resource: "arn:aws:iam::*:role/aws-service-role/application-signals.cloudwatch.amazonaws.com/AWSServiceRoleForCloudWatchApplicationSignals"
+          - Sid: "CreateBedrockAgentCoreNetworkServiceLinkedRolePermissions"
+            Effect: Allow
+            Action: "iam:CreateServiceLinkedRole"
+            Resource: "arn:aws:iam::*:role/aws-service-role/network.bedrock-agentcore.amazonaws.com/AWSServiceRoleForBedrockAgentCoreNetwork"
+            Condition:
+              StringEquals:
+                "iam:AWSServiceName": "network.bedrock-agentcore.amazonaws.com"
+          - Sid: "CreateBedrockAgentCoreRuntimeIdentityServiceLinkedRolePermissions"
+            Effect: Allow
+            Action: "iam:CreateServiceLinkedRole"
+            Resource: "arn:aws:iam::*:role/aws-service-role/runtime-identity.bedrock-agentcore.amazonaws.com/AWSServiceRoleForBedrockAgentCoreRuntimeIdentity"
+            Condition:
+              StringEquals:
+                "iam:AWSServiceName": "runtime-identity.bedrock-agentcore.amazonaws.com"
+          - Sid: "CloudFormationAccess"
+            Effect: Allow
+            Action:
+              - "cloudformation:*"
+            Resource: "*"
+          - Sid: "IAMFullAccess"
+            Effect: Allow
+            Action:
+              - "iam:*"
+            Resource: "*"
+          - Sid: "LambdaAccess"
+            Effect: Allow
+            Action:
+              - "lambda:*"
+            Resource: "*"
+
+  OpenSearchDomain:
+    Type: AWS::OpenSearchService::Domain
+    DependsOn: WorkshopParticipantPolicy
+    Properties:
+      DomainName: !Ref DomainName
+      EngineVersion: OpenSearch_3.1
+      ClusterConfig:
+        InstanceType: m5.2xlarge.search
+        InstanceCount: 2
+        ZoneAwarenessEnabled: true
+        ZoneAwarenessConfig:
+          AvailabilityZoneCount: 2
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 20
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+      AdvancedOptions:
+        override_main_response_version: "true"
+        rest.action.multi.allow_explicit_index: "true"
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: !Ref BANKuser
+          MasterUserPassword: !Ref BANKpassword
+      AccessPolicies:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole"
+            Action: "es:*"
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/*"
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: "es:ESHttp*"
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/*"
+
+Outputs:
+  DomainEndpoint:
+    Description: "Domain endpoint for the OpenSearch cluster"
+    Value: !GetAtt OpenSearchDomain.DomainEndpoint
+    
+  DashboardsURL:
+    Description: "URL for OpenSearch Dashboards"
+    Value: !Sub "https://${OpenSearchDomain.DomainEndpoint}/_dashboards/"
