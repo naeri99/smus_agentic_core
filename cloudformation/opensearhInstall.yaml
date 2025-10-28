@@ -226,7 +226,6 @@ Resources:
           - Effect: Allow
             Action:
               - "sagemaker:*"
-              - "sagemaker-runtime:*"
             Resource: "*"
           - Effect: Allow
             Action:
@@ -428,6 +427,11 @@ Resources:
             Effect: Allow
             Action:
               - "lambda:*"
+            Resource: "*"
+          - Sid: "ECRFullAccess"
+            Effect: Allow
+            Action:
+              - "ecr:*"
             Resource: "*"
 
   OpenSearchDomain:
