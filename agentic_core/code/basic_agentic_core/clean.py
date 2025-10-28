@@ -19,13 +19,34 @@ def load_deployment_info():
             return json.load(f)
     return None
 
+def wait_for_deletion(runtime_id, client):
+    """Runtime 삭제 완료 대기"""
+    print("⏳ Runtime 삭제 완료 대기 중...")
+    
+    for i in range(30):
+        try:
+            client.get_agent_runtime(agentRuntimeId=runtime_id)
+            print(f"📊 삭제 진행 중... ({i*30}초 경과)")
+            time.sleep(30)
+        except client.exceptions.ResourceNotFoundException:
+            print("✅ Runtime 삭제 완료!")
+            return
+        except Exception as e:
+            print(f"⚠️ 상태 확인 오류: {e}")
+            time.sleep(30)
+    
+    print("⚠️ 삭제 완료 확인 시간 초과 (15분)")
+
 def delete_runtime(agent_arn, region):
     """Runtime 삭제"""
     try:
         runtime_id = agent_arn.split('/')[-1]
         client = boto3.client('bedrock-agentcore-control', region_name=region)
         client.delete_agent_runtime(agentRuntimeId=runtime_id)
-        print(f"✅ Runtime 삭제: {runtime_id} (리전: {region})")
+        print(f"✅ Runtime 삭제 시작: {runtime_id} (리전: {region})")
+        
+        # 삭제 완료 대기
+        wait_for_deletion(runtime_id, client)
         return True
     except Exception as e:
         print(f"⚠️ Runtime 삭제 실패: {e}")
