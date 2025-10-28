@@ -137,11 +137,12 @@ def main():
     
     print("\n🎉 AWS 리소스 정리 완료!")
     
-    # 4. 로컬 파일들 정리
-    if input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ").lower() == 'y':
-        cleanup_local_files()
-    else:
-        print("📁 로컬 파일들은 유지됩니다.")
+    cleanup_local_files()
+    # # 4. 로컬 파일들 정리
+    # if input("\n로컬 생성 파일들도 삭제하시겠습니까? (y/N): ").lower() == 'y':
+    #     cleanup_local_files()
+    # else:
+    #     print("📁 로컬 파일들은 유지됩니다.")
 
 if __name__ == "__main__":
     main()
