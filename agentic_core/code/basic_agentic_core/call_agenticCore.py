@@ -1,15 +1,12 @@
 import json
 import boto3
 import asyncio
+import argparse
 from clean import load_deployment_info
 
-
-
-async def invoke_agent():
+async def invoke_agent(question):
     agentcore_client = boto3.client('bedrock-agentcore', region_name='us-west-2')
-
     deployment_info = load_deployment_info()
-
     
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
@@ -17,7 +14,7 @@ async def invoke_agent():
         lambda: agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=deployment_info["agent_arn"],
             qualifier="DEFAULT",
-            payload=json.dumps({"input_data": "태양의 온도는 얼마인가요?"})
+            payload=json.dumps({"input_data": question})
         )
     )
     
@@ -28,4 +25,9 @@ async def invoke_agent():
                 print(data['content'], end='')
     print()
 
-asyncio.run(invoke_agent())
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--query', required=True, help='질문을 입력하세요')
+    args = parser.parse_args()
+    
+    asyncio.run(invoke_agent(args.query))
