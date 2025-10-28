@@ -49,7 +49,6 @@ Resources:
                 Effect: Allow
                 Action:
                   - "sagemaker:*"
-                  - "sagemaker-runtime:*"
                 Resource: "*"
               
               # S3 Full Access
@@ -144,6 +143,14 @@ Resources:
                   - "rum:*"
                   - "synthetics:*"
                   - "xray:*"
+                Resource: "*"
+              
+              # CloudTrail and Application Signals Access
+              - Sid: "CloudTrailApplicationSignalsAccess"
+                Effect: Allow
+                Action:
+                  - "cloudtrail:CreateServiceLinkedChannel"
+                  - "application-signals:*"
                 Resource: "*"
               
               # Marketplace Operations
