@@ -1,4 +1,4 @@
-sudo apt install openjdk-22-jdk -y
+sudo apt install openjdk-21-jdk -y
 pip install langchain
 pip install langchain-core
 pip install langchain-aws
