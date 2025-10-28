@@ -14,5 +14,3 @@ pip install requests
 pip install urllib3
 pip install bedrock-agentcore
 pip install bedrock-agentcore-starter-toolkit
-pip install fitz
-pip install frontend

@@ -55,6 +55,14 @@ def create_agentcore_runtime_role(agent_name, region):
                 ]
             },
             {
+                "Sid": "SecretPermissions",
+                "Effect": "Allow",
+                "Action": [
+                    "secretsmanager:*"
+                ],
+                "Resource": "*"
+            },
+            {
                 "Sid": "AgentCoreMemoryPermissions",
                 "Effect": "Allow",
                 "Action": [
