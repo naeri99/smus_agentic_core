@@ -14,6 +14,7 @@ async def invoke_agent(question):
         lambda: agentcore_client.invoke_agent_runtime(
             agentRuntimeArn=deployment_info["agent_arn"],
             qualifier="DEFAULT",
+            runtimeSessionId="my-conversation-session",
             payload=json.dumps({"input_data": question})
         )
     )

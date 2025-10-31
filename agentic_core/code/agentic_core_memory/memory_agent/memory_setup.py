@@ -5,7 +5,6 @@ from bedrock_agentcore.memory import MemoryClient
 from bedrock_agentcore.memory.constants import StrategyType
 from botocore.exceptions import ClientError
 import logging
-from use_memory_time import Config
 
 
 
