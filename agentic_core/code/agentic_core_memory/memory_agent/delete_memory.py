@@ -15,7 +15,7 @@ client.delete_memory(memory_id=memory_id)
 print(f"Waiting for memory {memory_id} to be deleted...")
 while True:
     try:
-        client.get_memory(memory_id=memory_id)
+        client.get_memory(memoryId=memory_id)
         print("Memory still exists, waiting...")
         time.sleep(5)
     except Exception as e:
