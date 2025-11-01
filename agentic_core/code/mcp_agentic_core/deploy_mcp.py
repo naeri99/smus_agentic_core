@@ -18,6 +18,13 @@ from pathlib import Path
 import os
 
 
+class Config:
+    """MCP Server 배포 설정"""
+    REGION = "us-west-2"
+    MCP_SERVER_NAME = "mcp_server_agentic_core_please"
+
+
+
 # 공통 설정 및 shared 모듈 경로 추가
 root_path = Path(__file__).parent.parent
 print(root_path)
@@ -25,6 +32,50 @@ sys.path.insert(0, str(root_path))
 sys.path.insert(0, str(root_path / "shared"))
 
 from runtime_utils import create_agentcore_runtime_role
+
+def add_ssm_permissions_to_execution_role(boto_session, execution_role_arn):
+    """Add SSM permissions to execution role"""
+    if not execution_role_arn:
+        print("No execution role ARN provided, skipping SSM permissions")
+        return
+    
+    # Get current account ID and region
+    sts_client = boto_session.client('sts')
+    account_id = sts_client.get_caller_identity()['Account']
+    region = boto_session.region_name
+    
+    # Create IAM client
+    iam_client = boto_session.client('iam')
+    
+    # Extract role name from ARN
+    role_name = execution_role_arn.split('/')[-1]
+    
+    # SSM policy document
+    ssm_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "ssm:*",
+                "Resource": f"arn:aws:ssm:{region}:{account_id}:parameter/*"
+            }
+        ]
+    }
+    
+    policy_name = "SSMParameterAccess"
+    
+    try:
+        # Try to create inline policy
+        iam_client.put_role_policy(
+            RoleName=role_name,
+            PolicyName=policy_name,
+            PolicyDocument=json.dumps(ssm_policy)
+        )
+        print(f"✓ Added SSM permissions to role {role_name}")
+        print(f"  Account ID: {account_id}")
+        print(f"  Region: {region}")
+    except Exception as e:
+        print(f"Failed to add SSM permissions: {e}")
 
 def store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn=None, ecr_repository_uri=None):
     """Store agent information to SSM Parameter Store"""
@@ -62,11 +113,6 @@ def store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn=None, 
             Overwrite=True
         )
 
-class Config:
-    """MCP Server 배포 설정"""
-    REGION = "us-west-2"
-    MCP_SERVER_NAME = "mcp_server_agentic_core_kkk"
-
 
 
 def main():
@@ -99,40 +145,17 @@ def main():
     )
     print("Configuration completed ✓")
     
-    # Debug: Print all available attributes
-    print(f"Response type: {type(response)}")
-    print(f"Response attributes: {dir(response)}")
-    if hasattr(response, '__dict__'):
-        print(f"Response dict: {response.__dict__}")
-    
-    print(f"Runtime type: {type(agentcore_runtime)}")
-    print(f"Runtime attributes: {dir(agentcore_runtime)}")
-    if hasattr(agentcore_runtime, '__dict__'):
-        print(f"Runtime dict: {agentcore_runtime.__dict__}")
-    
-    # Try to find execution role and ECR repository
+    # Get execution role ARN from runtime after configuration
     execution_role_arn = None
+    if hasattr(agentcore_runtime, 'execution_role_arn'):
+        execution_role_arn = agentcore_runtime.execution_role_arn
+        print(f"Found execution role ARN: {execution_role_arn}")
+    elif hasattr(agentcore_runtime, '_execution_role_arn'):
+        execution_role_arn = agentcore_runtime._execution_role_arn
+        print(f"Found execution role ARN: {execution_role_arn}")
+    
+    # Initialize ECR repository URI
     ecr_repository_uri = None
-    
-    for attr in ['execution_role_arn', 'role_arn', 'iam_role_arn']:
-        if hasattr(response, attr):
-            execution_role_arn = getattr(response, attr)
-            print(f"Found execution role in response.{attr}: {execution_role_arn}")
-            break
-        elif hasattr(agentcore_runtime, attr):
-            execution_role_arn = getattr(agentcore_runtime, attr)
-            print(f"Found execution role in runtime.{attr}: {execution_role_arn}")
-            break
-    
-    for attr in ['ecr_repository_uri', 'repository_uri', 'ecr_uri']:
-        if hasattr(response, attr):
-            ecr_repository_uri = getattr(response, attr)
-            print(f"Found ECR repository in response.{attr}: {ecr_repository_uri}")
-            break
-        elif hasattr(agentcore_runtime, attr):
-            ecr_repository_uri = getattr(agentcore_runtime, attr)
-            print(f"Found ECR repository in runtime.{attr}: {ecr_repository_uri}")
-            break
 
 
     print("Launching MCP server to AgentCore Runtime...")
@@ -141,6 +164,14 @@ def main():
     print("Launch completed ✓")
     print(f"Agent ARN: {launch_result.agent_arn}")
     print(f"Agent ID: {launch_result.agent_id}")
+
+    # Extract ECR repository URI from launch result
+    if hasattr(launch_result, 'ecr_uri') and launch_result.ecr_uri:
+        ecr_repository_uri = launch_result.ecr_uri
+        print(f"Found ECR URI in launch_result: {ecr_repository_uri}")
+
+    # Add SSM permissions to execution role
+    add_ssm_permissions_to_execution_role(boto_session, execution_role_arn)
 
     store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn, ecr_repository_uri)
     print("✓ Agent ARN, ID, Execution Role, and ECR Repository stored in Parameter Store")
@@ -155,4 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

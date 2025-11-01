@@ -21,7 +21,13 @@ def create_streamable_http_transport_sigv4(mcp_url: str, service_name: str, regi
 async def llm_mcp_handler(mcp_session, query):
     # Get available tools
     tools = await mcp_session.list_tools()
-    tool_descriptions = [f"- {t.name}: {t.description}" for t in tools.tools]
+    tool_descriptions = []
+    for t in tools.tools:
+        params = []
+        if hasattr(t, 'inputSchema') and t.inputSchema and 'properties' in t.inputSchema:
+            params = list(t.inputSchema['properties'].keys())
+        param_str = f"({', '.join(params)})" if params else ""
+        tool_descriptions.append(f"- {t.name}{param_str}: {t.description}")
     
     # Initialize LLM
     bedrock_client = boto3.client('bedrock-runtime', region_name='us-west-2')
@@ -39,7 +45,9 @@ Available tools:
 
 Respond in JSON format:
 - To use tool: {{"tool": "tool_name", "params": {{"param1": "value1"}}}}
-- Direct answer: {{"tool": null, "response": "your_answer"}}"""
+- Direct answer: {{"tool": null, "response": "your_answer"}}
+
+Use exact parameter names shown in parentheses."""
 
     # Get LLM response
     response = llm.invoke(prompt).content.strip()
@@ -76,16 +84,21 @@ async def extract_text(payload):
         
         yield {"type": "status", "message": "✅ Connecting to MCP..."}
         
-        async with create_streamable_http_transport_sigv4(
-            mcp_url=mcp_url, service_name="bedrock-agentcore", region=region
-        ) as (read_stream, write_stream, _):
-            async with ClientSession(read_stream, write_stream) as mcp_session:
-                await mcp_session.initialize()
-                
-                yield {"type": "status", "message": "✅ Processing..."}
-                
-                response = await llm_mcp_handler(mcp_session, payload["input_data"])
-                yield {"type": "stream", "content": response}
+        try:
+            async with create_streamable_http_transport_sigv4(
+                mcp_url=mcp_url, service_name="bedrock-agentcore", region=region
+            ) as (read_stream, write_stream, _):
+                async with ClientSession(read_stream, write_stream) as mcp_session:
+                    await mcp_session.initialize()
+                    
+                    yield {"type": "status", "message": "✅ Processing..."}
+                    
+                    response = await llm_mcp_handler(mcp_session, payload["input_data"])
+                    yield {"type": "stream", "content": response}
+        except Exception as session_error:
+            # Ignore session termination errors
+            if "404" not in str(session_error):
+                raise session_error
                 
     except Exception as e:
         yield {"type": "error", "message": str(e)}
