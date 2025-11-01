@@ -21,7 +21,7 @@ import os
 class Config:
     """MCP Server 배포 설정"""
     REGION = "us-west-2"
-    MCP_SERVER_NAME = "mcp_server_agentic_core_please"
+    MCP_SERVER_NAME = "mcp_server_agentic_core_why"
 
 
 
@@ -154,13 +154,53 @@ def main():
         execution_role_arn = agentcore_runtime._execution_role_arn
         print(f"Found execution role ARN: {execution_role_arn}")
     
+    # If not found, try IAM lookup with known pattern
+    if not execution_role_arn:
+        try:
+            iam_client = boto_session.client('iam', region_name=region)
+            # Try to find role with agent name pattern
+            role_prefix = f"AmazonBedrockAgentCoreSDKRuntime-{region}-"
+            paginator = iam_client.get_paginator('list_roles')
+            for page in paginator.paginate():
+                for role in page['Roles']:
+                    if role['RoleName'].startswith(role_prefix):
+                        execution_role_arn = role['Arn']
+                        print(f"Found execution role via IAM search: {execution_role_arn}")
+                        break
+                if execution_role_arn:
+                    break
+        except Exception as e:
+            print(f"Could not find execution role: {e}")
+    
     # Initialize ECR repository URI
     ecr_repository_uri = None
 
 
     print("Launching MCP server to AgentCore Runtime...")
     print("This may take several minutes...")
-    launch_result = agentcore_runtime.launch()
+    
+    # Capture stdout to parse execution role from logs
+    import sys
+    from io import StringIO
+    
+    old_stdout = sys.stdout
+    captured_output = StringIO()
+    sys.stdout = captured_output
+    
+    try:
+        launch_result = agentcore_runtime.launch()
+    finally:
+        sys.stdout = old_stdout
+    
+    # Parse execution role from captured output
+    output_lines = captured_output.getvalue()
+    print(output_lines)  # Print the captured output
+    
+    for line in output_lines.split('\n'):
+        if "✅ Execution role available:" in line:
+            execution_role_arn = line.split("✅ Execution role available: ")[1].strip()
+            print(f"Found execution role from logs: {execution_role_arn}")
+            break
     print("Launch completed ✓")
     print(f"Agent ARN: {launch_result.agent_arn}")
     print(f"Agent ID: {launch_result.agent_id}")
@@ -186,3 +226,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
