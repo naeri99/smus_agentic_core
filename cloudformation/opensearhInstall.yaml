@@ -18,8 +18,12 @@ Parameters:
     ConstraintDescription: "Password must be at least 8 characters long"
     Default: "Bankadmin123!"
 
+  QueueName:
+    Type: String
+    Default: bank.fifo
+    Description: Name of the FIFO queue
+
 Resources:
-  # Unified IAM Policy for SMUS Agentic Core Project
   SmusAgenticCoreProjectPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -28,26 +32,19 @@ Resources:
       PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Bedrock Full Access
               - Sid: "BedrockFullAccess"
                 Effect: Allow
                 Action:
                   - "bedrock:*"
                 Resource: "*"
-
-              # Bedrock Full Access
               - Sid: "SSM"
                 Effect: Allow
                 Action: "ssm:*"
                 Resource: "*"
-              
               - Sid: "SQSFullAccess"
                 Effect: Allow
                 Action: "sqs:*"
                 Resource: "*"
-
-
-              # OpenSearch Full Access
               - Sid: "OpenSearchFullAccess"
                 Effect: Allow
                 Action:
@@ -55,22 +52,16 @@ Resources:
                   - "aoss:*"
                   - "opensearch:*"
                 Resource: "*"
-              
-              # SageMaker Full Access
               - Sid: "SageMakerFullAccess"
                 Effect: Allow
                 Action:
                   - "sagemaker:*"
                 Resource: "*"
-              
-              # S3 Full Access
               - Sid: "S3FullAccess"
                 Effect: Allow
                 Action:
                   - "s3:*"
                 Resource: "*"
-              
-              # IAM Full Access
               - Sid: "IAMFullAccess"
                 Effect: Allow
                 Action:
@@ -86,8 +77,6 @@ Resources:
                   - "organizations:ListPolicies"
                   - "organizations:ListTargetsForPolicy"
                 Resource: "*"
-              
-              # ECR and CodeBuild Access
               - Sid: "ECRCodeBuildAccess"
                 Effect: Allow
                 Action:
@@ -100,22 +89,16 @@ Resources:
                   - "codebuild:BatchGetBuilds"
                   - "codebuild:BatchGetProjects"
                 Resource: "*"
-              
-              # Bedrock Agent Core Full Access
               - Sid: "BedrockAgentCoreFullAccess"
                 Effect: Allow
                 Action:
                   - "bedrock-agentcore:*"
                 Resource: "arn:aws:bedrock-agentcore:*:*:*"
-              
-              # Secrets Manager Full Access
               - Sid: "SecretsManagerFullAccess"
                 Effect: Allow
                 Action:
                   - "secretsmanager:*"
                 Resource: "*"
-              
-              # KMS Access
               - Sid: "KMSAccess"
                 Effect: Allow
                 Action:
@@ -127,22 +110,16 @@ Resources:
                 Condition:
                   StringEquals:
                     "aws:ResourceAccount": "${aws:PrincipalAccount}"
-              
-              # Lambda Access
               - Sid: "LambdaAccess"
                 Effect: Allow
                 Action:
                   - "lambda:*"
                 Resource: "*"
-              
-              # CloudFormation Access
               - Sid: "CloudFormationAccess"
                 Effect: Allow
                 Action:
                   - "cloudformation:*"
                 Resource: "*"
-              
-              # CloudWatch and Logging Access
               - Sid: "CloudWatchLoggingAccess"
                 Effect: Allow
                 Action:
@@ -156,16 +133,12 @@ Resources:
                   - "synthetics:*"
                   - "xray:*"
                 Resource: "*"
-              
-              # CloudTrail and Application Signals Access
               - Sid: "CloudTrailApplicationSignalsAccess"
                 Effect: Allow
                 Action:
                   - "cloudtrail:CreateServiceLinkedChannel"
                   - "application-signals:*"
                 Resource: "*"
-              
-              # Marketplace Operations
               - Sid: "MarketplaceOperations"
                 Effect: Allow
                 Action:
@@ -176,8 +149,6 @@ Resources:
                 Condition:
                   StringEquals:
                     "aws:CalledViaLast": "bedrock.amazonaws.com"
-              
-              # EC2 VPC Access
               - Sid: "EC2VPCAccess"
                 Effect: Allow
                 Action:
@@ -185,8 +156,6 @@ Resources:
                   - "ec2:DescribeSubnets"
                   - "ec2:DescribeSecurityGroups"
                 Resource: "*"
-              
-              # Service Linked Role Creation
               - Sid: "ServiceLinkedRoleCreation"
                 Effect: Allow
                 Action:
@@ -201,8 +170,6 @@ Resources:
                       - "application-signals.cloudwatch.amazonaws.com"
                       - "network.bedrock-agentcore.amazonaws.com"
                       - "runtime-identity.bedrock-agentcore.amazonaws.com"
-              
-              # Pass Role Permissions
               - Sid: "PassRolePermissions"
                 Effect: Allow
                 Action:
@@ -235,11 +202,9 @@ Resources:
               - "aoss:*"
               - "opensearch:*"
             Resource: "*"
-            
           - Effect: Allow
             Action: "sqs:*"
             Resource: "*"
-
           - Effect: Allow
             Action:
               - "sagemaker:*"
@@ -498,7 +463,30 @@ Resources:
             Action: "es:ESHttp*"
             Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/*"
 
-  # Secrets Manager Secret for OpenSearch credentials
+  SQSCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: 
+      - FIFOQueue
+      - WorkshopParticipantPolicy
+    Properties:
+      Name: sqs-credentials
+      Description: "SQS FIFO queue information"
+      SecretString: !Sub |
+        {
+          "queue_name": "${QueueName}",
+          "queue_type": "FIFO",
+          "queue_arn": "${FIFOQueue.Arn}",
+          "queue_url": "${FIFOQueue}",
+          "region": "${AWS::Region}",
+          "encryption": "Amazon SQS key (SSE-SQS)",
+          "high_throughput_mode": false
+        }
+      Tags:
+        - Key: "Purpose"
+          Value: "SQS Queue Information"
+        - Key: "QueueType"
+          Value: "FIFO"
+
   OpenSearchCredentialsSecret:
     Type: AWS::SecretsManager::Secret
     DependsOn: 
@@ -519,6 +507,46 @@ Resources:
           Value: "OpenSearch Authentication"
         - Key: "Domain"
           Value: !Ref DomainName
+  
+  FIFOQueue:
+    Type: AWS::SQS::Queue
+    DependsOn: 
+      - WorkshopParticipantPolicy
+      - SmusAgenticCoreProjectPolicy
+    Properties:
+      QueueName: !Ref QueueName
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 30
+      MessageRetentionPeriod: 1209600
+      DelaySeconds: 0
+      ReceiveMessageWaitTimeSeconds: 10
+
+  SQSPolicy:
+    Type: AWS::SQS::QueuePolicy
+    DependsOn: 
+      - FIFOQueue
+      - WorkshopParticipantPolicy
+    Properties:
+      Queues:
+        - !Ref FIFOQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAccountAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'sqs:*'
+            Resource: !GetAtt FIFOQueue.Arn
+          - Sid: AllowWSParticipantRole
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:role/WSParticipantRole'
+            Action:
+              - 'sqs:*'
+            Resource: !GetAtt FIFOQueue.Arn
 
 Outputs:
   DomainEndpoint:
@@ -552,3 +580,27 @@ Outputs:
     Value: !Ref SmusAgenticCoreProjectPolicy
     Export:
       Name: !Sub "${AWS::StackName}-SmusAgenticCoreProjectPolicyName"
+
+  QueueURL:
+    Description: URL of the created FIFO queue
+    Value: !Ref FIFOQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueURL'
+  
+  QueueArn:
+    Description: ARN of the created FIFO queue
+    Value: !GetAtt FIFOQueue.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-QueueArn'
+
+  SQSSecretsManagerArn:
+    Description: "ARN of the Secrets Manager secret containing SQS queue information"
+    Value: !Ref SQSCredentialsSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-SQSCredentialsArn"
+      
+  SQSSecretName:
+    Description: "Name of the SQS Secrets Manager secret"
+    Value: !Ref SQSCredentialsSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-SQSCredentialsName"
