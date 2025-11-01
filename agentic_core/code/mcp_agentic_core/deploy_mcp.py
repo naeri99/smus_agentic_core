@@ -5,30 +5,75 @@ MCP Server 배포 스크립트
 ETF 데이터 조회용 MCP Server 배포
 """
 
+
 import boto3
 import sys
 import time
 import json
 from pathlib import Path
 from bedrock_agentcore_starter_toolkit import Runtime
+from bedrock_agentcore_starter_toolkit.operations.runtime import destroy_bedrock_agentcore
+from boto3.session import Session
+from pathlib import Path
+import os
+
 
 # 공통 설정 및 shared 모듈 경로 추가
-root_path = Path(__file__).parent.parent.parent.parent
+root_path = Path(__file__).parent.parent
+print(root_path)
 sys.path.insert(0, str(root_path))
 sys.path.insert(0, str(root_path / "shared"))
 
 from runtime_utils import create_agentcore_runtime_role
 
+def store_agent_info_to_ssm(ssm_client, launch_result):
+    """Store agent information to SSM Parameter Store"""
+    ssm_client.put_parameter(
+        Name='/mcp_server/runtime_iam/agent_arn',
+        Value=launch_result.agent_arn,
+        Type='String',
+        Description='Agent ARN for MCP server',
+        Overwrite=True
+    )
+    
+    ssm_client.put_parameter(
+        Name='/mcp_server/runtime_iam/agent_id',
+        Value=launch_result.agent_id,
+        Type='String',
+        Description='Agent ID for MCP server',
+        Overwrite=True
+    )
+    
+    ssm_client.put_parameter(
+        Name='/mcp_server/runtime_iam/execution_role_arn',
+        Value=launch_result.execution_role_arn,
+        Type='String',
+        Description='Execution Role ARN for MCP server',
+        Overwrite=True
+    )
+    
+    ssm_client.put_parameter(
+        Name='/mcp_server/runtime_iam/ecr_repository_url',
+        Value=f"https://{launch_result.ecr_repository_uri}",
+        Type='String',
+        Description='ECR Repository URL for MCP server',
+        Overwrite=True
+    )
+
 class Config:
     """MCP Server 배포 설정"""
     REGION = "us-west-2"
-    MCP_SERVER_NAME = "mcp_server_agentic_core"
+    MCP_SERVER_NAME = "mcp_server_agentic_core_final"
 
 
 
 def main():
     boto_session = Session()
     region = boto_session.region_name
+    
+    agentcore_control_client = boto_session.client("bedrock-agentcore-control", region_name=region)
+    ssm_client = boto_session.client('ssm', region_name=region)
+    
     
     print(f"Using AWS region: {region}")
 
@@ -60,19 +105,14 @@ def main():
     print(f"Agent ARN: {launch_result.agent_arn}")
     print(f"Agent ID: {launch_result.agent_id}")
 
-
-    agent_arn_response = ssm_client.put_parameter(
-        Name='/mcp_server/runtime_iam/agent_arn',
-        Value=launch_result.agent_arn,
-        Type='String',
-        Description='Agent ARN for MCP server with inbound auth',
-        Overwrite=True
-    )
-    print("✓ Agent ARN stored in Parameter Store")
+    store_agent_info_to_ssm(ssm_client, launch_result)
+    print("✓ Agent ARN, ID, Role, and ECR Repository URL stored in Parameter Store")
 
     print("\nConfiguration stored successfully!")
     print(f"Agent ARN: {launch_result.agent_arn}")
+    print(f"Agent ID: {launch_result.agent_id}")
+    print(f"Execution Role ARN: {launch_result.execution_role_arn}")
+    print(f"ECR Repository URL: https://{launch_result.ecr_repository_uri}")
 
 if __name__ == "__main__":
     main()
-
