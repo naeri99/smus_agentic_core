@@ -26,7 +26,7 @@ sys.path.insert(0, str(root_path / "shared"))
 
 from runtime_utils import create_agentcore_runtime_role
 
-def store_agent_info_to_ssm(ssm_client, launch_result):
+def store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn=None, ecr_repository_uri=None):
     """Store agent information to SSM Parameter Store"""
     ssm_client.put_parameter(
         Name='/mcp_server/runtime_iam/agent_arn',
@@ -44,26 +44,28 @@ def store_agent_info_to_ssm(ssm_client, launch_result):
         Overwrite=True
     )
     
-    ssm_client.put_parameter(
-        Name='/mcp_server/runtime_iam/execution_role_arn',
-        Value=launch_result.execution_role_arn,
-        Type='String',
-        Description='Execution Role ARN for MCP server',
-        Overwrite=True
-    )
+    if execution_role_arn:
+        ssm_client.put_parameter(
+            Name='/mcp_server/runtime_iam/execution_role_arn',
+            Value=execution_role_arn,
+            Type='String',
+            Description='Execution Role ARN for MCP server',
+            Overwrite=True
+        )
     
-    ssm_client.put_parameter(
-        Name='/mcp_server/runtime_iam/ecr_repository_url',
-        Value=f"https://{launch_result.ecr_repository_uri}",
-        Type='String',
-        Description='ECR Repository URL for MCP server',
-        Overwrite=True
-    )
+    if ecr_repository_uri:
+        ssm_client.put_parameter(
+            Name='/mcp_server/runtime_iam/ecr_repository_uri',
+            Value=ecr_repository_uri,
+            Type='String',
+            Description='ECR Repository URI for MCP server',
+            Overwrite=True
+        )
 
 class Config:
     """MCP Server 배포 설정"""
     REGION = "us-west-2"
-    MCP_SERVER_NAME = "mcp_server_agentic_core_final"
+    MCP_SERVER_NAME = "mcp_server_agentic_core_kkk"
 
 
 
@@ -96,6 +98,41 @@ def main():
         agent_name=Config.MCP_SERVER_NAME,
     )
     print("Configuration completed ✓")
+    
+    # Debug: Print all available attributes
+    print(f"Response type: {type(response)}")
+    print(f"Response attributes: {dir(response)}")
+    if hasattr(response, '__dict__'):
+        print(f"Response dict: {response.__dict__}")
+    
+    print(f"Runtime type: {type(agentcore_runtime)}")
+    print(f"Runtime attributes: {dir(agentcore_runtime)}")
+    if hasattr(agentcore_runtime, '__dict__'):
+        print(f"Runtime dict: {agentcore_runtime.__dict__}")
+    
+    # Try to find execution role and ECR repository
+    execution_role_arn = None
+    ecr_repository_uri = None
+    
+    for attr in ['execution_role_arn', 'role_arn', 'iam_role_arn']:
+        if hasattr(response, attr):
+            execution_role_arn = getattr(response, attr)
+            print(f"Found execution role in response.{attr}: {execution_role_arn}")
+            break
+        elif hasattr(agentcore_runtime, attr):
+            execution_role_arn = getattr(agentcore_runtime, attr)
+            print(f"Found execution role in runtime.{attr}: {execution_role_arn}")
+            break
+    
+    for attr in ['ecr_repository_uri', 'repository_uri', 'ecr_uri']:
+        if hasattr(response, attr):
+            ecr_repository_uri = getattr(response, attr)
+            print(f"Found ECR repository in response.{attr}: {ecr_repository_uri}")
+            break
+        elif hasattr(agentcore_runtime, attr):
+            ecr_repository_uri = getattr(agentcore_runtime, attr)
+            print(f"Found ECR repository in runtime.{attr}: {ecr_repository_uri}")
+            break
 
 
     print("Launching MCP server to AgentCore Runtime...")
@@ -105,14 +142,17 @@ def main():
     print(f"Agent ARN: {launch_result.agent_arn}")
     print(f"Agent ID: {launch_result.agent_id}")
 
-    store_agent_info_to_ssm(ssm_client, launch_result)
-    print("✓ Agent ARN, ID, Role, and ECR Repository URL stored in Parameter Store")
+    store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn, ecr_repository_uri)
+    print("✓ Agent ARN, ID, Execution Role, and ECR Repository stored in Parameter Store")
 
     print("\nConfiguration stored successfully!")
     print(f"Agent ARN: {launch_result.agent_arn}")
     print(f"Agent ID: {launch_result.agent_id}")
-    print(f"Execution Role ARN: {launch_result.execution_role_arn}")
-    print(f"ECR Repository URL: https://{launch_result.ecr_repository_uri}")
+    if execution_role_arn:
+        print(f"Execution Role ARN: {execution_role_arn}")
+    if ecr_repository_uri:
+        print(f"ECR Repository URI: {ecr_repository_uri}")
 
 if __name__ == "__main__":
     main()
+
