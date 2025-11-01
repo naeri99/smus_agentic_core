@@ -41,6 +41,12 @@ Resources:
                 Action: "ssm:*"
                 Resource: "*"
               
+              - Sid: "SQSFullAccess"
+                Effect: Allow
+                Action: "sqs:*"
+                Resource: "*"
+
+
               # OpenSearch Full Access
               - Sid: "OpenSearchFullAccess"
                 Effect: Allow
@@ -229,6 +235,11 @@ Resources:
               - "aoss:*"
               - "opensearch:*"
             Resource: "*"
+            
+          - Effect: Allow
+            Action: "sqs:*"
+            Resource: "*"
+
           - Effect: Allow
             Action:
               - "sagemaker:*"

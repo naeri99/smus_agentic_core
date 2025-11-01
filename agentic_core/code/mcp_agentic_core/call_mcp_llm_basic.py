@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import os
 import boto3
 import json
 import argparse
@@ -40,14 +41,15 @@ async def llm_mcp_handler(mcp_session, query):
     # Create prompt
     prompt = f"""Query: {query}
 
-Available tools:
-{chr(10).join(tool_descriptions)}
-
-Respond in JSON format:
-- To use tool: {{"tool": "tool_name", "params": {{"param1": "value1"}}}}
-- Direct answer: {{"tool": null, "response": "your_answer"}}
-
-Use exact parameter names shown in parentheses."""
+            Available tools:
+            {chr(10).join(tool_descriptions)}
+            
+            Respond in JSON format:
+            - To use tool: {{"tool": "tool_name", "params": {{"param1": "value1"}}}}
+            - Direct answer: {{"tool": null, "response": "your_answer"}}
+            
+            Use exact parameter names shown in parentheses.
+            """
 
     # Get LLM response
     response = llm.invoke(prompt).content.strip()
@@ -57,11 +59,10 @@ Use exact parameter names shown in parentheses."""
         decision = json.loads(response)
         
         if decision.get("tool"):
-            result = await mcp_session.call_tool(
-                decision["tool"], 
-                decision.get("params", {})
-            )
-            return f"🔧 Tool result: {result}"
+            tool_name = decision["tool"]
+            params = decision.get("params", {})
+            result = await mcp_session.call_tool(tool_name, params)
+            return f"🔧 Tool used: {tool_name}({params})\n🔧 Tool result: {result}"
         else:
             return f"🤖 LLM response: {decision.get('response', response)}"
             
@@ -84,6 +85,10 @@ async def extract_text(payload):
         
         yield {"type": "status", "message": "✅ Connecting to MCP..."}
         
+        # Suppress stderr to hide session termination errors
+        stderr_backup = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+        
         try:
             async with create_streamable_http_transport_sigv4(
                 mcp_url=mcp_url, service_name="bedrock-agentcore", region=region
@@ -95,10 +100,10 @@ async def extract_text(payload):
                     
                     response = await llm_mcp_handler(mcp_session, payload["input_data"])
                     yield {"type": "stream", "content": response}
-        except Exception as session_error:
-            # Ignore session termination errors
-            if "404" not in str(session_error):
-                raise session_error
+        finally:
+            # Always restore stderr
+            sys.stderr.close()
+            sys.stderr = stderr_backup
                 
     except Exception as e:
         yield {"type": "error", "message": str(e)}
