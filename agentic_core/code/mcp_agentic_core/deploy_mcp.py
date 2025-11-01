@@ -117,7 +117,7 @@ def store_agent_info_to_ssm(ssm_client, launch_result, execution_role_arn=None, 
 
 def main():
     boto_session = Session()
-    region = boto_session.region_name
+    region = Config.REGION
     
     agentcore_control_client = boto_session.client("bedrock-agentcore-control", region_name=region)
     ssm_client = boto_session.client('ssm', region_name=region)
