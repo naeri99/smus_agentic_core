@@ -219,6 +219,12 @@ Resources:
             Resource: "*"
           - Effect: Allow
             Action:
+              - "application-autoscaling:DescribeScalingActivities"
+              - "application-autoscaling:DescribeScalingPolicies"
+              - "application-autoscaling:DescribeScalableTargets"
+            Resource: "*"
+          - Effect: Allow
+            Action:
               - "sagemaker:*"
             Resource: "*"
           - Effect: Allow
