@@ -23,6 +23,11 @@ Parameters:
     Default: bank.fifo
     Description: Name of the FIFO queue
 
+  TableName:
+    Type: String
+    Default: "conversations-table"
+    Description: "DynamoDB table name"
+
 Resources:
   SmusAgenticCoreProjectPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -40,6 +45,10 @@ Resources:
               - Sid: "SSM"
                 Effect: Allow
                 Action: "ssm:*"
+                Resource: "*"
+              - Sid: "DynamoDB"
+                Effect: Allow
+                Action: "dynamodb:*"
                 Resource: "*"
               - Sid: "SQSFullAccess"
                 Effect: Allow
@@ -201,6 +210,9 @@ Resources:
               - "es:*"
               - "aoss:*"
               - "opensearch:*"
+            Resource: "*"
+          - Effect: Allow
+            Action: "dynamodb:*"
             Resource: "*"
           - Effect: Allow
             Action: "sqs:*"
@@ -463,6 +475,48 @@ Resources:
             Action: "es:ESHttp*"
             Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${DomainName}/*"
 
+  ConversationsTable:
+    Type: AWS::DynamoDB::Table
+    DependsOn: 
+      - WorkshopParticipantPolicy
+      - SmusAgenticCoreProjectPolicy
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: sequence
+          AttributeType: N
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: sequence
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: "Purpose"
+          Value: "Chatbot Conversations"
+        - Key: "Environment"
+          Value: "Workshop"
+
+  FIFOQueue:
+    Type: AWS::SQS::Queue
+    DependsOn: 
+      - WorkshopParticipantPolicy
+      - SmusAgenticCoreProjectPolicy
+    Properties:
+      QueueName: !Ref QueueName
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 30
+      MessageRetentionPeriod: 1209600
+      DelaySeconds: 0
+      ReceiveMessageWaitTimeSeconds: 10
+
   SQSCredentialsSecret:
     Type: AWS::SecretsManager::Secret
     DependsOn: 
@@ -487,6 +541,7 @@ Resources:
         - Key: "QueueType"
           Value: "FIFO"
 
+  
   OpenSearchCredentialsSecret:
     Type: AWS::SecretsManager::Secret
     DependsOn: 
@@ -507,20 +562,33 @@ Resources:
           Value: "OpenSearch Authentication"
         - Key: "Domain"
           Value: !Ref DomainName
-  
-  FIFOQueue:
-    Type: AWS::SQS::Queue
+
+
+    
+  DynamoDBCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
     DependsOn: 
+      - ConversationsTable
       - WorkshopParticipantPolicy
-      - SmusAgenticCoreProjectPolicy
     Properties:
-      QueueName: !Ref QueueName
-      FifoQueue: true
-      ContentBasedDeduplication: true
-      VisibilityTimeout: 30
-      MessageRetentionPeriod: 1209600
-      DelaySeconds: 0
-      ReceiveMessageWaitTimeSeconds: 10
+      Name: dynamodb-credentials
+      Description: "DynamoDB table information"
+      SecretString: !Sub |
+        {
+          "table_name": "${TableName}",
+          "table_arn": "${ConversationsTable.Arn}",
+          "region": "${AWS::Region}",
+          "billing_mode": "PAY_PER_REQUEST",
+          "encryption": "AWS managed key (SSE-S3)",
+          "point_in_time_recovery": true,
+          "stream_enabled": false
+        }
+      Tags:
+        - Key: "Purpose"
+          Value: "DynamoDB Table Information"
+        - Key: "TableType"
+          Value: "Conversations"
+  
 
   SQSPolicy:
     Type: AWS::SQS::QueuePolicy
@@ -604,3 +672,29 @@ Outputs:
     Value: !Ref SQSCredentialsSecret
     Export:
       Name: !Sub "${AWS::StackName}-SQSCredentialsName"
+
+
+  TableName:
+    Description: "DynamoDB table name"
+    Value: !Ref ConversationsTable
+    Export:
+      Name: !Sub "${AWS::StackName}-TableName"
+
+  TableArn:
+    Description: "DynamoDB table ARN"
+    Value: !GetAtt ConversationsTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-TableArn"
+
+  SecretTableArn:
+    Description: "Secrets Manager secret ARN"
+    Value: !Ref DynamoDBCredentialsSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-SecretArn"
+
+
+  SecretTableName:
+    Description: "Secrets Manager secret name"
+    Value: !Ref DynamoDBCredentialsSecret
+    Export:
+      Name: !Sub "${AWS::StackName}-SecretName"
