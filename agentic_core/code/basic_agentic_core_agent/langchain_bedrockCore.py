@@ -10,8 +10,8 @@ app = BedrockAgentCoreApp()
 class AdvancedLLM:
     """고급 LLM 스트리밍 관리자"""
     
-    def __init__(self, region_name: str = "us-west-2"):
-        self.region_name = region_name
+    def __init__(self):
+        self.region_name = boto3.Session().region_name
         self.model_id = None
         self.bedrock_client = self._setup_bedrock_client()
         self.llm = self._setup_llm()
