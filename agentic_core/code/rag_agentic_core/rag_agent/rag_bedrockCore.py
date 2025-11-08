@@ -17,15 +17,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from operator import itemgetter
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from boto3.session import Session
 
 app = BedrockAgentCoreApp()
 
 class OpenSearchEmbeddingProcessor:
     """OpenSearch 임베딩 처리 및 저장 클래스"""
     
-    def __init__(self, region = 'us-west-2', index_name= "aws-document-chunks" ):
+    def __init__(self, index_name= "aws-document-chunks" ):
         # AWS region
-        self.region = region
+
+        boto_session = Session()
+        region_name = boto3.Session().region_name
+
+        self.region = region_name
         self.service = 'es'
         
         # AWS credential
@@ -114,7 +119,9 @@ class OpenSearchEmbeddingProcessor:
 class RagLLM:
     """RagLLM 스트리밍 관리자"""
     
-    def __init__(self, region_name: str = "us-west-2"):
+    def __init__(self):
+        boto_session = Session()
+        region_name = boto3.Session().region_name
         self.region_name = region_name
         self.model_id = None
         self.bedrock_client = self._setup_bedrock_client()
