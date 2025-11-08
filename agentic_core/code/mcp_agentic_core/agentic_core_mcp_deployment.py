@@ -18,8 +18,8 @@ from mcp.client.streamable_http import GetSessionIdCallback, StreamableHTTPTrans
 from mcp.shared._httpx_utils import McpHttpClientFactory, create_mcp_http_client
 from mcp.shared.message import SessionMessage
 from langchain_aws import ChatBedrock
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from langchain.tools import BaseTool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import json
@@ -121,13 +121,11 @@ def create_streamable_http_transport_sigv4(mcp_url: str, service_name: str, regi
 
 async def llm_mcp_handler(mcp_session, region, query):
     try:
+        # MCP 도구 정보 가져오기
         mcp_tools = await mcp_session.list_tools()
-        tools_list = mcp_tools.tools if hasattr(mcp_tools, 'tools') else []
+        tools_list = mcp_tools.tools if hasattr(mcp_tools, 'tools') else mcp_tools
         
-        langchain_tools = []
-        for tool_info in tools_list:
-            langchain_tools.append(MCPTool(mcp_session, tool_info))
-        
+        # LLM 초기화
         bedrock_client = boto3.client('bedrock-runtime', region_name=region)
         llm = ChatBedrock(
             client=bedrock_client,
@@ -135,26 +133,77 @@ async def llm_mcp_handler(mcp_session, region, query):
             model_kwargs={"max_tokens": 1000, "temperature": 0}
         )
         
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "MCP 도구를 사용하여 사용자의 요청을 처리하세요."),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}")
-        ])
+        # 도구 정보를 스키마와 함께 텍스트로 변환
+        tool_descriptions = []
+        for tool_info in tools_list:
+            schema = tool_info.inputSchema
+            required_params = schema.get('required', [])
+            properties = schema.get('properties', {})
+            
+            param_info = []
+            for param in required_params:
+                param_type = properties.get(param, {}).get('type', 'unknown')
+                param_info.append(f"{param} ({param_type})")
+            
+            tool_descriptions.append(
+                f"- {tool_info.name}: {tool_info.description}\n"
+                f"  필수 파라미터: {', '.join(param_info)}"
+            )
         
-        agent = create_tool_calling_agent(llm, langchain_tools, prompt)
-        agent_executor = AgentExecutor(
-            agent=agent, 
-            tools=langchain_tools,
-            verbose=True,
-            handle_parsing_errors=True,
-            max_iterations=3
-        )
-
-        result = await agent_executor.ainvoke({"input": query})
-        return f"🤖 Agent response: {result['output']}"
+        tools_text = "\n".join(tool_descriptions)
+        
+        # 개선된 도구 선택 프롬프트
+        selection_prompt = f"""
+        사용 가능한 도구들:
+        {tools_text}
+        
+        질문: {query}
+        
+        이 질문을 분석하세요:
+        1. 수학 계산이 필요한가? → add_numbers 또는 multiply_numbers 사용
+        2. 사용자 인사가 필요한가? → greet_user 사용  
+        3. 위 도구들로 해결할 수 없는 일반적인 질문인가? → "none" 선택
+        
+        응답 형식:
+        {{
+            "tool": "도구명 또는 none",
+            "params": {{"파라미터": 값}} 또는 {{}}
+        }}
+        
+        JSON만 응답하세요:
+        """
+        
+        # LLM으로 도구 선택 및 파라미터 생성
+        response = await llm.ainvoke(selection_prompt)
+        
+        try:
+            import json
+            decision = json.loads(response.content.strip())
+            
+            tool_name = decision.get("tool")
+            params = decision.get("params", {})
+            
+            print(f"Selected tool: {tool_name}, params: {params}")
+            
+            if tool_name and tool_name.lower() != "none":
+                # MCP 도구 실행
+                tool_result = await mcp_session.call_tool(tool_name, params)
+                return f"🔧 도구 '{tool_name}' 결과: {tool_result}"
+            else:
+                # 도구 없이 직접 답변
+                direct_response = await llm.ainvoke(f"질문에 답하세요: {query}")
+                return f"🤖 직접 답변: {direct_response.content}"
+                
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"JSON 파싱 오류: {e}")
+            # JSON 파싱 실패 시 직접 답변
+            direct_response = await llm.ainvoke(f"질문에 답하세요: {query}")
+            return f"🤖 직접 답변: {direct_response.content}"
         
     except Exception as e:
-        return f"❌ Handler Error: {str(e)}"
+        return f"❌ Error: {str(e)}"
+
+
 
 @app.entrypoint
 async def extract_text(payload):
