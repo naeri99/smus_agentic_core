@@ -26,37 +26,6 @@ import json
 
 app = BedrockAgentCoreApp()
 
-class MCPTool(BaseTool):
-    name: str
-    description: str
-    mcp_session: Any = None
-    tool_info: Any = None
-    
-    def __init__(self, mcp_session, tool_info, **kwargs):
-        super().__init__(
-            name=tool_info.name,
-            description=tool_info.description,
-            mcp_session=mcp_session,
-            tool_info=tool_info,
-            **kwargs
-        )
-    
-    def _run(self, **kwargs) -> str:
-        try:
-            return asyncio.run(self._async_run(**kwargs))
-        except Exception as e:
-            return f"Tool error: {str(e)}"
-    
-    async def _arun(self, **kwargs) -> str:
-        return await self._async_run(**kwargs)
-    
-    async def _async_run(self, **kwargs) -> str:
-        try:
-            result = await self.mcp_session.call_tool(self.tool_info.name, kwargs)
-            return str(result)
-        except Exception as e:
-            return f"MCP tool error: {str(e)}"
-
 class SigV4HTTPXAuth(httpx.Auth):
     def __init__(self, credentials: Credentials, service: str, region: str):
         self.credentials = credentials
