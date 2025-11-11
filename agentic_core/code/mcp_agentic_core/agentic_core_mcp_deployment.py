@@ -20,7 +20,6 @@ from mcp.shared.message import SessionMessage
 from langchain_aws import ChatBedrock
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.tools import BaseTool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import json
 
